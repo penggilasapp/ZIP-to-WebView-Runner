@@ -1,83 +1,58 @@
-name: Build ZIP-to-WebView Runner APK
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TIGABELAS — Login</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="brand-mark">13</div>
+      <div class="brand">TIGABELAS</div>
+      <p class="subtitle">Laundry Outlet Management</p>
 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, master]
+      <div id="loading" class="status">Memeriksa sesi...</div>
 
-permissions:
-  contents: read
+      <div id="loginView" class="hidden">
+        <button id="googleLogin" class="google-btn" type="button">
+          <span class="google-icon">G</span>
+          <span>Masuk dengan Google</span>
+        </button>
+        <p class="hint">Akses TIGABELAS khusus untuk pengguna yang terdaftar.</p>
+      </div>
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+      <div id="appView" class="hidden">
+        <div class="welcome">
+          <div class="avatar-wrap">
+            <img id="avatar" alt="Foto profil" class="avatar">
+          </div>
+          <div>
+            <h2 id="userName">Pengguna</h2>
+            <p id="userEmail"></p>
+          </div>
+        </div>
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        <div class="role-box">
+          <span>ROLE</span>
+          <strong id="userRole">Memuat...</strong>
+        </div>
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+        <div class="dashboard-grid">
+          <div><span>Omzet Hari Ini</span><strong>Rp 0</strong></div>
+          <div><span>Kas Hari Ini</span><strong>Rp 0</strong></div>
+          <div><span>Belum Lunas</span><strong>Rp 0</strong></div>
+          <div><span>Order Aktif</span><strong>0</strong></div>
+        </div>
 
-      - name: Extract Android source ZIP
-        shell: bash
-        run: |
-          set -e
-          mkdir -p source
-          ZIP_FILE=$(find . -maxdepth 2 -type f -name '*.zip' | head -n 1)
+        <button id="logout" class="logout-btn" type="button">Keluar</button>
+      </div>
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "Source ZIP tidak ditemukan!"
-            exit 1
-          fi
+      <div id="errorView" class="error hidden"></div>
+    </section>
+  </main>
 
-          echo "Menggunakan: $ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d source
-
-          PROJECT_DIR=$(find source -type f \
-            -name settings.gradle.kts \
-            -printf '%h\n' | head -n 1)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "settings.gradle.kts tidak ditemukan!"
-            find source -maxdepth 4 -type f
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Proyek ditemukan: $PROJECT_DIR"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-
-      - name: Build debug APK
-        run: |
-          cd "$PROJECT_DIR"
-          gradle --no-daemon --stacktrace assembleDebug
-
-      - name: Verify APK
-        run: |
-          test -s "$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ZIP-to-WebView-Runner-v0.4.0
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
