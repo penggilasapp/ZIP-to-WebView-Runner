@@ -1,58 +1,103 @@
-<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TIGABELAS — Login</title>
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <main class="shell">
-    <section class="card">
-      <div class="brand-mark">13</div>
-      <div class="brand">TIGABELAS</div>
-      <p class="subtitle">Laundry Outlet Management</p>
+name: Build ZIP-to-WebView Runner APK
 
-      <div id="loading" class="status">Memeriksa sesi...</div>
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-      <div id="loginView" class="hidden">
-        <button id="googleLogin" class="google-btn" type="button">
-          <span class="google-icon">G</span>
-          <span>Masuk dengan Google</span>
-        </button>
-        <p class="hint">Akses TIGABELAS khusus untuk pengguna yang terdaftar.</p>
-      </div>
+permissions:
+  contents: read
 
-      <div id="appView" class="hidden">
-        <div class="welcome">
-          <div class="avatar-wrap">
-            <img id="avatar" alt="Foto profil" class="avatar">
-          </div>
-          <div>
-            <h2 id="userName">Pengguna</h2>
-            <p id="userEmail"></p>
-          </div>
-        </div>
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
-        <div class="role-box">
-          <span>ROLE</span>
-          <strong id="userRole">Memuat...</strong>
-        </div>
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-        <div class="dashboard-grid">
-          <div><span>Omzet Hari Ini</span><strong>Rp 0</strong></div>
-          <div><span>Kas Hari Ini</span><strong>Rp 0</strong></div>
-          <div><span>Belum Lunas</span><strong>Rp 0</strong></div>
-          <div><span>Order Aktif</span><strong>0</strong></div>
-        </div>
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-        <button id="logout" class="logout-btn" type="button">Keluar</button>
-      </div>
+      - name: Locate and extract Android source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      <div id="errorView" class="error hidden"></div>
-    </section>
-  </main>
+          ZIP_FILE="$(find . -maxdepth 3 -type f \
+            -iname '*ZIP-to-WebView-Runner*v0.4.0*SOURCE*.zip' \
+            -print -quit)"
 
-  <script type="module" src="./app.js"></script>
-</body>
-</html>
+          if [ -z "$ZIP_FILE" ]; then
+            ZIP_FILE="$(find . -maxdepth 3 -type f \
+              -iname '*SOURCE*.zip' -print -quit)"
+          fi
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "::error::Android source ZIP not found in repository."
+            exit 1
+          fi
+
+          echo "Source archive: $ZIP_FILE"
+          mkdir -p "$RUNNER_TEMP/ziprunner-source"
+          unzip -q "$ZIP_FILE" -d "$RUNNER_TEMP/ziprunner-source"
+
+          PROJECT_DIR="$(find "$RUNNER_TEMP/ziprunner-source" \
+            -name settings.gradle.kts -printf '%h\n' -quit)"
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "::error::settings.gradle.kts not found."
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "::error::Android app module not found."
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle --no-daemon --stacktrace assembleDebug
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -s "$APK" ]; then
+            echo "::error::APK was not generated."
+            exit 1
+          fi
+
+          echo "APK generated successfully."
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZIP-to-WebView-Runner-v0.4.0
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
